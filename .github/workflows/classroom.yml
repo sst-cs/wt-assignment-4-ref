@@ -1,0 +1,87 @@
+name: Autograde Express API
+
+on: [push, workflow_dispatch]
+
+jobs:
+  grade:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      statuses: write
+      checks: write
+
+    steps:
+      - name: Checkout student submission
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout hidden tests
+        continue-on-error: true
+        uses: actions/checkout@v4
+        with:
+          repository: sst-cs/wt-assignment-4-tests
+          token: ${{ secrets.HIDDEN_TESTS_TOKEN }}
+          path: hidden-tests
+
+      - name: Verify hidden tests available
+        run: |
+          if [ ! -d hidden-tests ]; then
+            echo "::error title=Hidden tests missing::Could not fetch the hidden tests."
+            exit 1
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: |
+          npm install
+          cd hidden-tests
+          npm install
+
+      - name: Run Integration Tests
+        id: test
+        run: |
+          cd hidden-tests
+          node test.cjs > test_output.txt
+          cat test_output.txt
+          SCORE=$(grep "Final Score:" test_output.txt | awk '{print $3}' | cut -d'/' -f1)
+          echo "SCORE=$SCORE" >> $GITHUB_ENV
+
+      - name: Package Results
+        id: package
+        run: |
+          TOTAL=${{ env.SCORE }}
+          [ -z "$TOTAL" ] && TOTAL=0
+          
+          echo "Integration Test Score: $TOTAL / 10"
+
+          DEADLINE_EPOCH=$(date -d "2026-07-05T18:59:00Z" +%s)
+          ZERO_EPOCH=$(date -d "2026-07-12T18:59:00Z" +%s)
+          LAST_CODE_ISO=$(git log --format="%cI" -- . ':(exclude).github/' 2>/dev/null | head -1)
+          [ -z "$LAST_CODE_ISO" ] && LAST_CODE_ISO=$(git log -1 --format=%cI)
+          LAST_CODE_EPOCH=$(date -d "$LAST_CODE_ISO" +%s 2>/dev/null || echo 0)
+          
+          if [ "$LAST_CODE_EPOCH" -gt "$ZERO_EPOCH" ]; then
+            TOTAL=0
+          elif [ "$LAST_CODE_EPOCH" -gt "$DEADLINE_EPOCH" ]; then
+            TOTAL=$(( TOTAL * 6 / 10 ))
+          fi
+
+          for i in $(seq 1 10); do
+            STATUS="fail"; SCORE_VAL=0
+            if [ $i -le $TOTAL ]; then STATUS="pass"; SCORE_VAL=1; fi
+            JSON="{\"version\":1,\"status\":\"$STATUS\",\"max_score\":1,\"tests\":[{\"name\":\"Requirement $i\",\"status\":\"$STATUS\",\"score\":$SCORE_VAL,\"max_score\":1}]}"
+            B64=$(echo -n "$JSON" | base64 -w 0)
+            echo "R${i}_RESULTS=$B64" >> $GITHUB_ENV
+          done
+
+      - name: Autograding Reporter
+        uses: classroom-resources/autograding-grading-reporter@v1
+        continue-on-error: true
+        with:
+          runners: r1,r2,r3,r4,r5,r6,r7,r8,r9,r10
