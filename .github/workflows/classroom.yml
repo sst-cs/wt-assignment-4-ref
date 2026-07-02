@@ -60,8 +60,8 @@ jobs:
           
           echo "Integration Test Score: $TOTAL / 10"
 
-          DEADLINE_EPOCH=$(date -d "2026-07-05T18:59:00Z" +%s)
-          ZERO_EPOCH=$(date -d "2026-07-12T18:59:00Z" +%s)
+          DEADLINE_EPOCH=$(date -d "2026-07-10T18:59:00Z" +%s)
+          ZERO_EPOCH=$(date -d "2026-07-17T18:59:00Z" +%s)
           LAST_CODE_ISO=$(git log --format="%cI" -- . ':(exclude).github/' 2>/dev/null | head -1)
           [ -z "$LAST_CODE_ISO" ] && LAST_CODE_ISO=$(git log -1 --format=%cI)
           LAST_CODE_EPOCH=$(date -d "$LAST_CODE_ISO" +%s 2>/dev/null || echo 0)
